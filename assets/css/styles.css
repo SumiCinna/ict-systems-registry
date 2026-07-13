@@ -1,0 +1,120 @@
+/* ------------------------------------------------------------
+   ICT Systems Registry — supplemental styles
+   Tailwind (CDN) handles utility classes; this file carries the
+   handful of things Tailwind can't express as one-off tokens.
+------------------------------------------------------------- */
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Thin gold-on-navy double rule under the letterhead, echoing a
+   ledger sheet's ruled header. */
+.ledger-rule {
+  height: 4px;
+  background: linear-gradient(to right, #0B2340 0%, #0B2340 100%);
+  position: relative;
+}
+.ledger-rule::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #C9A227;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #0B2340;
+}
+
+.field-sublabel {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #5B6B79;
+  margin-bottom: 0.25rem;
+}
+
+.ledger-input {
+  width: 100%;
+  border: 1px solid #D9D3C3;
+  background: #FFFFFF;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+  color: #28313A;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ledger-input:focus {
+  outline: none;
+  border-color: #1B4B72;
+  box-shadow: 0 0 0 3px rgba(27, 75, 114, 0.12);
+}
+.ledger-input.field-invalid {
+  border-color: #DC2626;
+}
+.ledger-input.field-valid {
+  border-color: #15803D;
+}
+
+.field-error {
+  min-height: 1rem;
+  font-size: 0.72rem;
+  color: #DC2626;
+  margin-top: 0.25rem;
+}
+
+.eye-toggle {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #5B6B79;
+  padding: 0.15rem;
+  line-height: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.eye-toggle:hover {
+  color: #0B2340;
+}
+
+/* Password requirement checklist, styled like tick-boxes on a form */
+.rule-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #5B6B79;
+}
+.rule-box {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  border: 1px solid #D9D3C3;
+  background: #fff;
+  position: relative;
+}
+.rule-item.met {
+  color: #15803D;
+}
+.rule-item.met .rule-box {
+  background: #15803D;
+  border-color: #15803D;
+}
+.rule-item.met .rule-box::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -1px;
+  width: 4px;
+  height: 7px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
