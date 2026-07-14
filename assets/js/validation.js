@@ -1,8 +1,11 @@
 document.addEventListener('DOMContentLoaded', function () {
   const form = document.getElementById('registerForm');
+  const agencyName = document.getElementById('agency_name');
   const lastName = document.getElementById('last_name');
   const firstName = document.getElementById('first_name');
   const middleInitial = document.getElementById('middle_initial');
+  const positionDesignation = document.getElementById('position_designation');
+  const telephoneNumber = document.getElementById('telephone_number');
   const email = document.getElementById('email');
   const password = document.getElementById('password');
   const confirmPassword = document.getElementById('confirm_password');
@@ -11,9 +14,12 @@ document.addEventListener('DOMContentLoaded', function () {
   const checklistItems = document.querySelectorAll('#passwordChecklist .rule-item');
 
   const state = {
+    agency_name: false,
     last_name: false,
     first_name: false,
     middle_initial: true, // optional
+    position_designation: false,
+    telephone_number: false,
     email: false,
     password: false,
     confirm_password: false,
@@ -33,6 +39,46 @@ document.addEventListener('DOMContentLoaded', function () {
     const allValid = Object.values(state).every(Boolean);
     submitBtn.disabled = !allValid;
   }
+
+  // ---------- Free-text fields (agency, position/designation) ----------
+  function validateFreeText(input, key, label, min, max) {
+    const value = input.value.trim();
+    if (value.length < min) {
+      state[key] = false;
+      setError(key, label + ' is required.');
+    } else if (value.length > max) {
+      state[key] = false;
+      setError(key, label + ' is too long.');
+    } else {
+      state[key] = true;
+      setError(key, '');
+    }
+    updateSubmitState();
+  }
+
+  agencyName.addEventListener('input', () =>
+    validateFreeText(agencyName, 'agency_name', 'Name of Agency', 2, 191));
+
+  positionDesignation.addEventListener('input', () =>
+    validateFreeText(positionDesignation, 'position_designation', 'Position/Designation', 2, 150));
+
+  // ---------- Telephone number ----------
+  const phonePattern = /^[0-9+\-() ]{7,20}$/;
+  telephoneNumber.addEventListener('input', () => {
+    const value = telephoneNumber.value.trim();
+    const digitCount = (value.match(/[0-9]/g) || []).length;
+    if (value === '') {
+      state.telephone_number = false;
+      setError('telephone_number', 'Telephone number is required.');
+    } else if (!phonePattern.test(value) || digitCount < 7) {
+      state.telephone_number = false;
+      setError('telephone_number', 'Enter a valid telephone number.');
+    } else {
+      state.telephone_number = true;
+      setError('telephone_number', '');
+    }
+    updateSubmitState();
+  });
 
   // ---------- Name fields ----------
   const namePattern = /^[A-Za-zÀ-ÿ' -]{1,100}$/;

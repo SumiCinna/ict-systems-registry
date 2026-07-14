@@ -24,23 +24,32 @@ if (empty($_POST['csrf_token']) || empty($_SESSION['csrf_token']) ||
 }
 
 // ---- Collect + trim input ----
-$lastName        = trim($_POST['last_name'] ?? '');
-$firstName       = trim($_POST['first_name'] ?? '');
-$middleInitial   = trim($_POST['middle_initial'] ?? '');
-$email           = trim($_POST['email'] ?? '');
-$password        = (string) ($_POST['password'] ?? '');
-$confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+$agencyName          = trim($_POST['agency_name'] ?? '');
+$lastName            = trim($_POST['last_name'] ?? '');
+$firstName           = trim($_POST['first_name'] ?? '');
+$middleInitial       = trim($_POST['middle_initial'] ?? '');
+$positionDesignation = trim($_POST['position_designation'] ?? '');
+$telephoneNumber     = trim($_POST['telephone_number'] ?? '');
+$email               = trim($_POST['email'] ?? '');
+$password            = (string) ($_POST['password'] ?? '');
+$confirmPassword     = (string) ($_POST['confirm_password'] ?? '');
 
 $old = [
-    'last_name'      => $lastName,
-    'first_name'     => $firstName,
-    'middle_initial' => $middleInitial,
-    'email'          => $email,
+    'agency_name'          => $agencyName,
+    'last_name'            => $lastName,
+    'first_name'           => $firstName,
+    'middle_initial'       => $middleInitial,
+    'position_designation' => $positionDesignation,
+    'telephone_number'     => $telephoneNumber,
+    'email'                => $email,
 ];
 
 $errors = [];
 
 // ---- Validate ----
+if (!validate_free_text($agencyName, 2, 191)) {
+    $errors[] = 'Name of Agency is required.';
+}
 if (!validate_name($lastName)) {
     $errors[] = 'Last name is required and must contain letters only.';
 }
@@ -49,6 +58,12 @@ if (!validate_name($firstName)) {
 }
 if (!validate_middle_initial($middleInitial)) {
     $errors[] = 'Middle initial must contain letters only.';
+}
+if (!validate_free_text($positionDesignation, 2, 150)) {
+    $errors[] = 'Position/Designation is required.';
+}
+if (!validate_telephone($telephoneNumber)) {
+    $errors[] = 'Please provide a valid telephone number.';
 }
 if (!validate_email_address($email)) {
     $errors[] = 'Please provide a valid email address.';
@@ -81,16 +96,19 @@ try {
     $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
     $insertStmt = $pdo->prepare(
-        'INSERT INTO users (last_name, first_name, middle_initial, email, password_hash)
-         VALUES (:last_name, :first_name, :middle_initial, :email, :password_hash)'
+        'INSERT INTO users (agency_name, last_name, first_name, middle_initial, position_designation, telephone_number, email, password_hash)
+         VALUES (:agency_name, :last_name, :first_name, :middle_initial, :position_designation, :telephone_number, :email, :password_hash)'
     );
 
     $insertStmt->execute([
-        'last_name'      => $lastName,
-        'first_name'     => $firstName,
-        'middle_initial' => $middleInitial !== '' ? $middleInitial : null,
-        'email'          => $email,
-        'password_hash'  => $passwordHash,
+        'agency_name'          => $agencyName,
+        'last_name'            => $lastName,
+        'first_name'           => $firstName,
+        'middle_initial'       => $middleInitial !== '' ? $middleInitial : null,
+        'position_designation' => $positionDesignation,
+        'telephone_number'     => $telephoneNumber,
+        'email'                => $email,
+        'password_hash'        => $passwordHash,
     ]);
 
     $_SESSION['user_id'] = (int) $pdo->lastInsertId();

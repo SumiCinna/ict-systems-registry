@@ -1,0 +1,312 @@
+<?php
+require_once __DIR__ . '/includes/auth_guard.php';
+require_once __DIR__ . '/config/database.php';
+
+$pdo = getDbConnection();
+
+$stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
+$stmt->execute(['id' => $_SESSION['user_id']]);
+$user = $stmt->fetch();
+
+if (!$user) {
+    header('Location: logout.php');
+    exit;
+}
+
+$errors = $_SESSION['ictproj_errors'] ?? [];
+$oldEntries = $_SESSION['ictproj_old'] ?? [];
+$success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['ictproj_errors'], $_SESSION['ictproj_old'], $_SESSION['flash_success']);
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
+if (empty($oldEntries)) {
+    $oldEntries = [[
+        'project_name' => '',
+        'description' => '',
+        'start_date' => '',
+        'end_date' => '',
+        'project_contract_cost' => '',
+        'third_party_provider' => '',
+        'funding_source' => '',
+        'status' => '',
+    ]];
+}
+
+function v(array $entry, string $key): string
+{
+    return htmlspecialchars($entry[$key] ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+function sel(array $entry, string $key, string $option): string
+{
+    return ($entry[$key] ?? '') === $option ? 'selected' : '';
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>List of ICT Projects — ICT Systems Registry</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ledger: {
+            navy: '#0B2340',
+            steel: '#1B4B72',
+            gold: '#C9A227',
+            paper: '#F7F5EF',
+            line: '#D9D3C3',
+            ink: '#28313A',
+            muted: '#5B6B79',
+          }
+        },
+        fontFamily: {
+          display: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
+          body: ['"Inter"', 'system-ui', 'sans-serif'],
+        }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="bg-ledger-paper font-body text-ledger-ink min-h-screen">
+
+<header class="bg-ledger-navy text-white">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div>
+      <p class="text-[10px] tracking-[0.25em] uppercase text-white/60">ICT Systems &amp; Projects Registry</p>
+      <p class="font-display text-lg"><?= htmlspecialchars($user['agency_name'], ENT_QUOTES, 'UTF-8') ?></p>
+    </div>
+    <div class="flex items-center gap-4">
+      <a href="survey.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
+        BACK TO SURVEYS
+      </a>
+      <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
+        LOG OUT
+      </a>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-5xl mx-auto px-6 py-10">
+
+  <div class="text-center mb-8">
+    <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Survey 2</p>
+    <h1 class="font-display text-2xl md:text-3xl text-ledger-navy">List of Information and Communications Technology (ICT) Projects</h1>
+    <p class="text-sm text-ledger-muted mt-1">Ongoing and Completed</p>
+    <div class="ledger-rule mt-4 mx-auto" style="max-width: 220px;"></div>
+  </div>
+
+  <div class="border border-ledger-line bg-white text-xs text-ledger-muted px-5 py-4 mb-8">
+    Illustration: If a project has multiple contracts with different service providers, create two separate line items for each one to describe them accordingly.
+  </div>
+
+  <?php if ($success): ?>
+    <div class="border border-green-300 bg-green-50 text-green-800 text-sm px-4 py-3 mb-6" role="status">
+      <?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!empty($errors)): ?>
+    <div class="border border-red-300 bg-red-50 text-red-800 text-sm px-4 py-3 mb-6" role="alert">
+      <p class="font-semibold mb-1">Please correct the following:</p>
+      <ul class="list-disc list-inside space-y-0.5">
+        <?php foreach ($errors as $error): ?>
+          <li><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></li>
+        <?php endforeach; ?>
+      </ul>
+    </div>
+  <?php endif; ?>
+
+  <form action="ict-projects-process.php" method="POST" id="ictProjForm">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+
+    <div id="entriesContainer" class="space-y-6">
+      <?php foreach ($oldEntries as $i => $entry): ?>
+      <div class="entry-card bg-white border border-ledger-line shadow-sm p-8 relative">
+        <div class="flex items-center justify-between mb-6">
+          <span class="entry-label text-[10px] font-semibold tracking-[0.2em] uppercase text-ledger-gold">Project <?= $i + 1 ?></span>
+          <button type="button" class="remove-entry text-xs font-semibold text-red-600 hover:text-red-800 <?= count($oldEntries) <= 1 ? 'hidden' : '' ?>">
+            REMOVE
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+          <div>
+            <label class="field-label">Project Name <span class="text-ledger-gold">*</span></label>
+            <input type="text" name="entries[<?= $i ?>][project_name]" required maxlength="191"
+                   value="<?= v($entry, 'project_name') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+                   placeholder="e.g. Digitalization Project">
+          </div>
+
+          <div>
+            <label class="field-label">Description <span class="text-ledger-gold">*</span></label>
+            <input type="text" name="entries[<?= $i ?>][description]" required maxlength="255"
+                   value="<?= v($entry, 'description') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+                   placeholder="e.g. Network Management">
+          </div>
+
+          <div>
+            <label class="field-label">Start Date</label>
+            <input type="date" name="entries[<?= $i ?>][start_date]"
+                   value="<?= v($entry, 'start_date') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
+          </div>
+
+          <div>
+            <label class="field-label">End Date</label>
+            <input type="date" name="entries[<?= $i ?>][end_date]"
+                   value="<?= v($entry, 'end_date') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
+          </div>
+
+          <div>
+            <label class="field-label">Project/Contract Cost</label>
+            <input type="number" step="0.01" min="0" name="entries[<?= $i ?>][project_contract_cost]"
+                   value="<?= v($entry, 'project_contract_cost') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+                   placeholder="e.g. 3000000.00">
+          </div>
+
+          <div>
+            <label class="field-label">Third Party Service Provider</label>
+            <input type="text" name="entries[<?= $i ?>][third_party_provider]" maxlength="191"
+                   value="<?= v($entry, 'third_party_provider') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+                   placeholder="e.g. Company A">
+          </div>
+
+          <div>
+            <label class="field-label">Funding Source</label>
+            <input type="text" name="entries[<?= $i ?>][funding_source]" maxlength="191"
+                   value="<?= v($entry, 'funding_source') ?>"
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+                   placeholder="e.g. General Fund">
+          </div>
+
+          <div>
+            <label class="field-label">Status <span class="text-ledger-gold">*</span></label>
+            <select name="entries[<?= $i ?>][status]" required
+                    class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
+              <option value="" disabled <?= v($entry, 'status') === '' ? 'selected' : '' ?>>Select one</option>
+              <option value="Ongoing" <?= sel($entry, 'status', 'Ongoing') ?>>Ongoing</option>
+              <option value="Completed" <?= sel($entry, 'status', 'Completed') ?>>Completed</option>
+            </select>
+          </div>
+
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+
+    <button type="button" id="addEntryBtn"
+            class="mt-6 w-full border-2 border-dashed border-ledger-line text-ledger-steel text-sm font-semibold tracking-wide py-3 hover:border-ledger-steel hover:bg-white transition-colors">
+      + ADD ANOTHER PROJECT
+    </button>
+
+    <button type="submit"
+            class="mt-8 w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+      SUBMIT
+    </button>
+  </form>
+
+</div>
+
+<template id="entryTemplate">
+  <div class="entry-card bg-white border border-ledger-line shadow-sm p-8 relative">
+    <div class="flex items-center justify-between mb-6">
+      <span class="entry-label text-[10px] font-semibold tracking-[0.2em] uppercase text-ledger-gold">Project __INDEX_LABEL__</span>
+      <button type="button" class="remove-entry text-xs font-semibold text-red-600 hover:text-red-800">
+        REMOVE
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+      <div>
+        <label class="field-label">Project Name <span class="text-ledger-gold">*</span></label>
+        <input type="text" name="entries[__INDEX__][project_name]" required maxlength="191"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+               placeholder="e.g. Digitalization Project">
+      </div>
+
+      <div>
+        <label class="field-label">Description <span class="text-ledger-gold">*</span></label>
+        <input type="text" name="entries[__INDEX__][description]" required maxlength="255"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+               placeholder="e.g. Network Management">
+      </div>
+
+      <div>
+        <label class="field-label">Start Date</label>
+        <input type="date" name="entries[__INDEX__][start_date]"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
+      </div>
+
+      <div>
+        <label class="field-label">End Date</label>
+        <input type="date" name="entries[__INDEX__][end_date]"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
+      </div>
+
+      <div>
+        <label class="field-label">Project/Contract Cost</label>
+        <input type="number" step="0.01" min="0" name="entries[__INDEX__][project_contract_cost]"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+               placeholder="e.g. 3000000.00">
+      </div>
+
+      <div>
+        <label class="field-label">Third Party Service Provider</label>
+        <input type="text" name="entries[__INDEX__][third_party_provider]" maxlength="191"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+               placeholder="e.g. Company A">
+      </div>
+
+      <div>
+        <label class="field-label">Funding Source</label>
+        <input type="text" name="entries[__INDEX__][funding_source]" maxlength="191"
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
+               placeholder="e.g. General Fund">
+      </div>
+
+      <div>
+        <label class="field-label">Status <span class="text-ledger-gold">*</span></label>
+        <select name="entries[__INDEX__][status]" required
+                class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
+          <option value="" disabled selected>Select one</option>
+          <option value="Ongoing">Ongoing</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
+
+    </div>
+  </div>
+</template>
+
+<script src="assets/js/entry-repeater.js"></script>
+<script>
+  initEntryRepeater({
+    formId: 'ictProjForm',
+    containerId: 'entriesContainer',
+    templateId: 'entryTemplate',
+    addBtnId: 'addEntryBtn',
+    labelPrefix: 'Project '
+  });
+</script>
+</body>
+</html>
