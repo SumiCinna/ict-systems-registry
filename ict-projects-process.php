@@ -2,6 +2,7 @@
 require_once __DIR__ . '/includes/auth_guard.php';
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/validators.php';
+require_once __DIR__ . '/includes/survey_flow.php';
 
 function backToForm(array $errors, array $old): void
 {
@@ -10,6 +11,9 @@ function backToForm(array $errors, array $old): void
     header('Location: ict-projects.php');
     exit;
 }
+
+$pdoGuard = getDbConnection();
+require_stage($pdoGuard, $_SESSION['user_id'], 'projects');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: ict-projects.php');
@@ -131,7 +135,7 @@ try {
     $pdo->commit();
 
     $_SESSION['flash_success'] = count($cleanEntries) . ' ICT project(s) saved.';
-    header('Location: survey.php');
+    header('Location: ict-projects-summary.php');
     exit;
 
 } catch (PDOException $e) {

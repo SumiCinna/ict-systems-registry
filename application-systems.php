@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '/includes/auth_guard.php';
 require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
+require_stage($pdo, $_SESSION['user_id'], 'systems');
 
 $stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
