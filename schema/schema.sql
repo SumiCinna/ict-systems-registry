@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS users (
     telephone_number       VARCHAR(20)         NOT NULL,
     email                  VARCHAR(191)        NOT NULL,
     password_hash          VARCHAR(255)        NOT NULL,
+    survey_stage           VARCHAR(20)         NOT NULL DEFAULT 'systems',
+    submitted_at           DATETIME            NULL,
+    app_systems_done       TINYINT(1)          NOT NULL DEFAULT 0,
+    ict_projects_done      TINYINT(1)          NOT NULL DEFAULT 0,
     created_at             TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at             TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP
                                                 ON UPDATE CURRENT_TIMESTAMP,

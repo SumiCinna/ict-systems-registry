@@ -4,7 +4,11 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
-require_stage($pdo, $_SESSION['user_id'], 'projects');
+
+if (get_survey_stage($pdo, $_SESSION['user_id']) === 'submitted') {
+    header('Location: survey.php');
+    exit;
+}
 
 $stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
@@ -108,16 +112,38 @@ $csrfToken = $_SESSION['csrf_token'];
 
   <p class="text-center text-sm text-ledger-muted mb-6"><?= count($entries) ?> entr<?= count($entries) === 1 ? 'y' : 'ies' ?> recorded so far.</p>
 
+  <?php if ($ictDone): ?>
+    <div class="border border-green-300 bg-green-50 text-green-800 text-sm px-4 py-3 mb-6" role="status">
+      Survey 2 is complete. Both surveys are now done — you can review and submit everything.
+    </div>
+  <?php endif; ?>
+
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <a href="ict-projects.php" class="text-center border-2 border-dashed border-ledger-line text-ledger-steel text-sm font-semibold tracking-wide py-3 hover:border-ledger-steel hover:bg-white transition-colors">
-      SUBMIT ANOTHER ENTRY
+    <?php if ($ictDone): ?>
+      <a href="final-review.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+        FINALIZE &amp; REVIEW
+      </a>
+      <a href="ict-projects.php" class="text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-paper transition-colors">
+        ADD ANOTHER ENTRY
+      </a>
+    <?php else: ?>
+      <a href="ict-projects.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+        ADD ANOTHER ENTRY
+      </a>
+      <form action="next-form.php" method="POST">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="from" value="ict">
+        <button type="submit" class="w-full bg-ledger-steel text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy transition-colors" <?= empty($entries) ? 'disabled' : '' ?>>
+          FINALIZE &amp; REVIEW
+        </button>
+      </form>
+    <?php endif; ?>
+  </div>
+
+  <div class="text-center mt-6">
+    <a href="survey.php" class="text-xs font-semibold tracking-wide text-ledger-muted hover:text-ledger-navy transition-colors">
+      BACK TO SURVEYS
     </a>
-    <form action="ict-projects-confirm.php" method="POST">
-      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-      <button type="submit" class="w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors" <?= empty($entries) ? 'disabled' : '' ?>>
-        CONFIRM (FINALIZE)
-      </button>
-    </form>
   </div>
 
 </div>

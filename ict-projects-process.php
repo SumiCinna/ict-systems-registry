@@ -13,7 +13,7 @@ function backToForm(array $errors, array $old): void
 }
 
 $pdoGuard = getDbConnection();
-require_stage($pdoGuard, $_SESSION['user_id'], 'projects');
+require_not_submitted($pdoGuard, $_SESSION['user_id'], 'projects');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: ict-projects.php');
@@ -135,6 +135,7 @@ try {
     $pdo->commit();
 
     $_SESSION['flash_success'] = count($cleanEntries) . ' ICT project(s) saved.';
+
     header('Location: ict-projects-summary.php');
     exit;
 

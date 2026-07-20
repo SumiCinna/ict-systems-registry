@@ -28,8 +28,8 @@ $password = (string) ($_POST['password'] ?? '');
 $old = ['email' => $email];
 $errors = [];
 
-if (!validate_email_address($email)) {
-    $errors[] = 'Please provide a valid email address.';
+if ($email === '') {
+    $errors[] = 'Email or username is required.';
 }
 if ($password === '') {
     $errors[] = 'Password is required.';
@@ -42,12 +42,16 @@ if (!empty($errors)) {
 $pdo = getDbConnection();
 
 try {
-    $stmt = $pdo->prepare('SELECT id, password_hash FROM users WHERE email = :email LIMIT 1');
+    $stmt = $pdo->prepare('SELECT id, password_hash, is_disabled FROM users WHERE email = :email LIMIT 1');
     $stmt->execute(['email' => $email]);
     $user = $stmt->fetch();
 
     if (!$user || !password_verify($password, $user['password_hash'])) {
         backToForm(['The email or password you entered is incorrect.'], $old);
+    }
+
+    if ((int) $user['is_disabled'] === 1) {
+        backToForm(['Your account has been disabled. Contact the administrator.'], $old);
     }
 
     session_regenerate_id(true);

@@ -89,10 +89,10 @@ function old(string $key, array $old): string
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
 
       <div>
-        <label for="email" class="field-label">Email address <span class="text-ledger-gold">*</span></label>
-        <input type="email" id="email" name="email" required maxlength="191"
+        <label for="email" class="field-label">Email or Username <span class="text-ledger-gold">*</span></label>
+        <input type="text" id="email" name="email" required maxlength="191"
                value="<?= old('email', $old) ?>"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel" placeholder="you@agency.gov.ph" autocomplete="email">
+               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel" placeholder="you@agency.gov.ph" autocomplete="username">
         <p class="field-error" data-error-for="email"></p>
       </div>
 

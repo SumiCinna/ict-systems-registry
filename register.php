@@ -113,7 +113,7 @@ function old(string $key, array $old): string
             <label for="middle_initial" class="field-sublabel">M.I.</label>
             <input type="text" id="middle_initial" name="middle_initial" maxlength="5"
                    value="<?= old('middle_initial', $old) ?>"
-                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel" placeholder="S." autocomplete="additional-name">
+                   class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel" placeholder="S" autocomplete="additional-name">
             <p class="field-error" data-error-for="middle_initial"></p>
           </div>
         </div>

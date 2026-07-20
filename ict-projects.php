@@ -4,7 +4,7 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
-require_stage($pdo, $_SESSION['user_id'], 'projects');
+require_not_submitted($pdo, $_SESSION['user_id'], 'projects');
 
 $stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
@@ -81,6 +81,7 @@ function sel(array $entry, string $key, string $option): string
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<script src="assets/js/survey-form.js" defer></script>
 </head>
 <body class="bg-ledger-paper font-body text-ledger-ink min-h-screen">
 
@@ -215,11 +216,6 @@ function sel(array $entry, string $key, string $option): string
       <?php endforeach; ?>
     </div>
 
-    <button type="button" id="addEntryBtn"
-            class="mt-6 w-full border-2 border-dashed border-ledger-line text-ledger-steel text-sm font-semibold tracking-wide py-3 hover:border-ledger-steel hover:bg-white transition-colors">
-      + ADD ANOTHER PROJECT
-    </button>
-
     <button type="submit"
             class="mt-8 w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
       SUBMIT
@@ -227,88 +223,3 @@ function sel(array $entry, string $key, string $option): string
   </form>
 
 </div>
-
-<template id="entryTemplate">
-  <div class="entry-card bg-white border border-ledger-line shadow-sm p-8 relative">
-    <div class="flex items-center justify-between mb-6">
-      <span class="entry-label text-[10px] font-semibold tracking-[0.2em] uppercase text-ledger-gold">Project __INDEX_LABEL__</span>
-      <button type="button" class="remove-entry text-xs font-semibold text-red-600 hover:text-red-800">
-        REMOVE
-      </button>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-
-      <div>
-        <label class="field-label">Project Name <span class="text-ledger-gold">*</span></label>
-        <input type="text" name="entries[__INDEX__][project_name]" required maxlength="191"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
-               placeholder="e.g. Digitalization Project">
-      </div>
-
-      <div>
-        <label class="field-label">Description <span class="text-ledger-gold">*</span></label>
-        <input type="text" name="entries[__INDEX__][description]" required maxlength="255"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
-               placeholder="e.g. Network Management">
-      </div>
-
-      <div>
-        <label class="field-label">Start Date</label>
-        <input type="date" name="entries[__INDEX__][start_date]"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
-      </div>
-
-      <div>
-        <label class="field-label">End Date</label>
-        <input type="date" name="entries[__INDEX__][end_date]"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
-      </div>
-
-      <div>
-        <label class="field-label">Project/Contract Cost</label>
-        <input type="number" step="0.01" min="0" name="entries[__INDEX__][project_contract_cost]"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
-               placeholder="e.g. 3000000.00">
-      </div>
-
-      <div>
-        <label class="field-label">Third Party Service Provider</label>
-        <input type="text" name="entries[__INDEX__][third_party_provider]" maxlength="191"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
-               placeholder="e.g. Company A">
-      </div>
-
-      <div>
-        <label class="field-label">Funding Source</label>
-        <input type="text" name="entries[__INDEX__][funding_source]" maxlength="191"
-               class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel"
-               placeholder="e.g. General Fund">
-      </div>
-
-      <div>
-        <label class="field-label">Status <span class="text-ledger-gold">*</span></label>
-        <select name="entries[__INDEX__][status]" required
-                class="ledger-input w-full border border-ledger-line rounded-sm px-3 py-2 bg-white mt-2 focus:outline-none focus:ring-2 focus:ring-ledger-steel focus:border-ledger-steel">
-          <option value="" disabled selected>Select one</option>
-          <option value="Ongoing">Ongoing</option>
-          <option value="Completed">Completed</option>
-        </select>
-      </div>
-
-    </div>
-  </div>
-</template>
-
-<script src="assets/js/entry-repeater.js"></script>
-<script>
-  initEntryRepeater({
-    formId: 'ictProjForm',
-    containerId: 'entriesContainer',
-    templateId: 'entryTemplate',
-    addBtnId: 'addEntryBtn',
-    labelPrefix: 'Project '
-  });
-</script>
-</body>
-</html>

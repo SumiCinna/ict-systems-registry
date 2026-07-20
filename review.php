@@ -6,17 +6,129 @@ require_once __DIR__ . '/includes/survey_flow.php';
 $pdo = getDbConnection();
 $stage = get_survey_stage($pdo, $_SESSION['user_id']);
 
-if ($stage !== 'review' && $stage !== 'submitted') {
-    header('Location: ' . stage_redirect_target($stage));
-    exit;
-}
-
 $stmt = $pdo->prepare('SELECT agency_name, submitted_at FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
 $user = $stmt->fetch();
 
 if (!$user) {
     header('Location: logout.php');
+    exit;
+}
+
+$singleSurvey = $_GET['survey'] ?? null;
+
+if ($singleSurvey === 'app' || $singleSurvey === 'ict') {
+    if ($singleSurvey === 'app') {
+        $title = 'List of Application Systems';
+        $entriesStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id ORDER BY id ASC');
+    } else {
+        $title = 'List of ICT Projects';
+        $entriesStmt = $pdo->prepare('SELECT * FROM ict_projects WHERE user_id = :id ORDER BY id ASC');
+    }
+    $entriesStmt->execute(['id' => $_SESSION['user_id']]);
+    $entries = $entriesStmt->fetchAll();
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?> — ICT Systems Registry</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ledger: { navy: '#0B2340', steel: '#1B4B72', gold: '#C9A227', paper: '#F7F5EF', line: '#D9D3C3', ink: '#28313A', muted: '#5B6B79' }
+            },
+            fontFamily: { display: ['Georgia', 'Cambria', 'Times New Roman', 'serif'], body: ['"Inter"', 'system-ui', 'sans-serif'] }
+          }
+        }
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/style.css">
+    </head>
+    <body class="bg-ledger-paper font-body text-ledger-ink min-h-screen">
+
+    <header class="bg-ledger-navy text-white">
+      <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div>
+          <p class="text-[10px] tracking-[0.25em] uppercase text-white/60">ICT Systems &amp; Projects Registry</p>
+          <p class="font-display text-lg"><?= htmlspecialchars($user['agency_name'], ENT_QUOTES, 'UTF-8') ?></p>
+        </div>
+        <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">LOG OUT</a>
+      </div>
+    </header>
+
+    <div class="max-w-5xl mx-auto px-6 py-10">
+
+      <div class="text-center mb-8">
+        <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Your Entries</p>
+        <h1 class="font-display text-2xl md:text-3xl text-ledger-navy"><?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?></h1>
+        <div class="ledger-rule mt-4 mx-auto" style="max-width: 220px;"></div>
+      </div>
+
+      <div class="bg-white border border-ledger-line shadow-sm overflow-x-auto mb-8">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="bg-ledger-navy text-white text-left">
+              <?php if ($singleSurvey === 'app'): ?>
+                <th class="px-4 py-3 font-semibold">Application</th>
+                <th class="px-4 py-3 font-semibold">Strategy</th>
+                <th class="px-4 py-3 font-semibold">Mode</th>
+                <th class="px-4 py-3 font-semibold">Users</th>
+                <th class="px-4 py-3 font-semibold">Status</th>
+              <?php else: ?>
+                <th class="px-4 py-3 font-semibold">Project</th>
+                <th class="px-4 py-3 font-semibold">Description</th>
+                <th class="px-4 py-3 font-semibold">Cost</th>
+                <th class="px-4 py-3 font-semibold">Provider</th>
+                <th class="px-4 py-3 font-semibold">Status</th>
+              <?php endif; ?>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($entries as $entry): ?>
+            <tr class="border-t border-ledger-line">
+              <?php if ($singleSurvey === 'app'): ?>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['application_name_version'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['development_strategy'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['mode_of_implementation'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="px-4 py-3"><?= $entry['no_of_users'] !== null ? htmlspecialchars($entry['no_of_users'], ENT_QUOTES, 'UTF-8') : '—' ?></td>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['status'], ENT_QUOTES, 'UTF-8') ?></td>
+              <?php else: ?>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['project_name'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['description'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="px-4 py-3"><?= $entry['project_contract_cost'] !== null ? number_format((float) $entry['project_contract_cost'], 2) : '—' ?></td>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['third_party_provider'] ?? '—', ENT_QUOTES, 'UTF-8') ?></td>
+                <td class="px-4 py-3"><?= htmlspecialchars($entry['status'], ENT_QUOTES, 'UTF-8') ?></td>
+              <?php endif; ?>
+            </tr>
+            <?php endforeach; ?>
+            <?php if (empty($entries)): ?>
+            <tr><td colspan="5" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td></tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+
+      <a href="survey.php" class="block text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-white transition-colors">
+        BACK TO DASHBOARD
+      </a>
+
+    </div>
+
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+if ($stage !== 'review' && $stage !== 'submitted') {
+    header('Location: ' . stage_redirect_target($stage));
     exit;
 }
 

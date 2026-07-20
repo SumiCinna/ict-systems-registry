@@ -44,8 +44,7 @@ session_start();
     <h1 class="font-display text-3xl md:text-4xl text-ledger-navy">Application Systems &amp; ICT Project Records</h1>
     <div class="ledger-rule mt-4 mb-6"></div>
     <p class="text-sm text-ledger-muted max-w-md mx-auto leading-relaxed">
-      A single record of your agency's application systems and ICT projects —
-      built from the inventory template, kept current, and ready to submit.
+      A single record of your agency's application systems and ICT projects.
     </p>
 
     <div class="mt-9 flex flex-col sm:flex-row gap-3 justify-center">

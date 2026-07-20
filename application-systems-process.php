@@ -13,7 +13,7 @@ function backToForm(array $errors, array $old): void
 }
 
 $pdoGuard = getDbConnection();
-require_stage($pdoGuard, $_SESSION['user_id'], 'systems');
+require_not_submitted($pdoGuard, $_SESSION['user_id'], 'systems');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: application-systems.php');
@@ -182,6 +182,7 @@ try {
     $pdo->commit();
 
     $_SESSION['flash_success'] = count($cleanEntries) . ' application system(s) saved.';
+
     header('Location: application-systems-summary.php');
     exit;
 

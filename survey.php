@@ -14,8 +14,12 @@ if (!$user) {
     exit;
 }
 
-$fullName = trim($user['first_name'] . ' ' . ($user['middle_initial'] !== null && $user['middle_initial'] !== '' ? $user['middle_initial'] . '. ' : '') . $user['last_name']);
-$stage = $user['survey_stage'];
+$fullName = trim($user['first_name'] . ' ' . ($user['middle_initial'] !== null && $user['middle_initial'] !== '' ? rtrim($user['middle_initial'], '.') . '. ' : '') . $user['last_name']);
+$progress = get_survey_progress($pdo, $_SESSION['user_id']);
+$stage = $progress['stage'];
+$appDone = $progress['app_done'];
+$ictDone = $progress['ict_done'];
+$bothDone = $progress['both_done'];
 
 $appSystemsStmt = $pdo->prepare('SELECT COUNT(*) AS total FROM application_systems WHERE user_id = :id');
 $appSystemsStmt->execute(['id' => $_SESSION['user_id']]);
@@ -25,29 +29,13 @@ $ictProjectsStmt = $pdo->prepare('SELECT COUNT(*) AS total FROM ict_projects WHE
 $ictProjectsStmt->execute(['id' => $_SESSION['user_id']]);
 $ictProjectsCount = (int) $ictProjectsStmt->fetch()['total'];
 
-$steps = [
-    'systems' => 'Survey 1: List of Application Systems',
-    'projects' => 'Survey 2: List of ICT Projects',
-    'review' => 'Final Review',
-    'submitted' => 'Submitted',
-];
-$stageOrder = ['systems', 'projects', 'review', 'submitted'];
-$currentIndex = array_search($stage, $stageOrder, true);
+$success = $_SESSION['flash_success'] ?? null;
+unset($_SESSION['flash_success']);
 
-$ctaLabel = 'Start Survey 1';
-$ctaHref = 'application-systems.php';
-if ($stage === 'systems' && $appSystemsCount > 0) {
-    $ctaLabel = 'Continue Survey 1';
-} elseif ($stage === 'projects') {
-    $ctaLabel = $ictProjectsCount > 0 ? 'Continue Survey 2' : 'Start Survey 2';
-    $ctaHref = 'ict-projects.php';
-} elseif ($stage === 'review') {
-    $ctaLabel = 'Review & Submit';
-    $ctaHref = 'review.php';
-} elseif ($stage === 'submitted') {
-    $ctaLabel = 'View Submitted Survey';
-    $ctaHref = 'review.php';
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+$csrfToken = $_SESSION['csrf_token'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -94,50 +82,130 @@ if ($stage === 'systems' && $appSystemsCount > 0) {
 
   <div class="text-center mb-10">
     <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Annual Survey</p>
-    <h1 class="font-display text-2xl md:text-3xl text-ledger-navy">Your progress</h1>
+    <h1 class="font-display text-2xl md:text-3xl text-ledger-navy">Forms</h1>
     <div class="ledger-rule mt-4 mx-auto" style="max-width: 220px;"></div>
   </div>
 
-  <div class="bg-white border border-ledger-line shadow-sm p-8">
+  <div class="bg-white border border-ledger-line shadow-sm p-10">
 
-    <ol class="space-y-4 mb-8">
-      <?php foreach ($steps as $key => $label): ?>
-        <?php
-          $stepIndex = array_search($key, $stageOrder, true);
-          $done = $stepIndex < $currentIndex || ($key === 'submitted' && $stage === 'submitted');
-          $active = $key === $stage;
-        ?>
-        <li class="flex items-center gap-3">
-          <span class="w-6 h-6 flex items-center justify-center text-[11px] font-semibold rounded-full border
-            <?= $done ? 'bg-green-600 border-green-600 text-white' : ($active ? 'border-ledger-navy text-ledger-navy' : 'border-ledger-line text-ledger-muted') ?>">
-            <?= $done ? '✓' : $stepIndex + 1 ?>
-          </span>
-          <span class="text-sm <?= $active ? 'font-semibold text-ledger-navy' : ($done ? 'text-ledger-ink' : 'text-ledger-muted') ?>">
-            <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
-          </span>
-        </li>
-      <?php endforeach; ?>
-    </ol>
-
-    <div class="grid grid-cols-2 gap-4 mb-8 text-center">
-      <div class="border border-ledger-line px-4 py-3">
-        <p class="text-2xl font-display text-ledger-navy"><?= $appSystemsCount ?></p>
-        <p class="text-[11px] uppercase tracking-wide text-ledger-muted mt-1">Application Systems</p>
+    <?php if ($success): ?>
+      <div class="border border-green-300 bg-green-50 text-green-800 text-sm px-4 py-3 mb-8" role="status">
+        <?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?>
       </div>
-      <div class="border border-ledger-line px-4 py-3">
-        <p class="text-2xl font-display text-ledger-navy"><?= $ictProjectsCount ?></p>
-        <p class="text-[11px] uppercase tracking-wide text-ledger-muted mt-1">ICT Projects</p>
+    <?php endif; ?>
+
+    <p class="text-sm text-ledger-muted text-center mb-8 max-w-xl mx-auto">
+      Choose a survey to begin. Both the Application Systems and ICT Projects surveys are required. You may start with either one.
+    </p>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-2">
+      <div class="border border-ledger-line bg-white p-8 flex flex-col">
+        <p class="text-xs tracking-[0.2em] uppercase text-ledger-gold">Survey 1</p>
+        <h3 class="font-display text-xl text-ledger-navy mt-1">Application Systems</h3>
+        <p class="text-sm text-ledger-muted mt-1">
+          <?= $appSystemsCount ?> entr<?= $appSystemsCount === 1 ? 'y' : 'ies' ?>
+          <?= $appDone ? ' &middot; completed' : '' ?>
+        </p>
+        <?php if ($appDone): ?>
+          <a href="review.php?survey=app"
+             class="mt-6 text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy hover:text-white transition-colors">
+            VIEW ENTRIES
+          </a>
+        <?php else: ?>
+          <a href="application-systems.php"
+             class="mt-6 text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+            <?= $appSystemsCount > 0 ? 'ADD / CONTINUE' : 'START SURVEY' ?>
+          </a>
+        <?php endif; ?>
+      </div>
+
+      <div class="border border-ledger-line bg-white p-8 flex flex-col">
+        <p class="text-xs tracking-[0.2em] uppercase text-ledger-gold">Survey 2</p>
+        <h3 class="font-display text-xl text-ledger-navy mt-1">ICT Projects</h3>
+        <p class="text-sm text-ledger-muted mt-1">
+          <?= $ictProjectsCount ?> entr<?= $ictProjectsCount === 1 ? 'y' : 'ies' ?>
+          <?= $ictDone ? ' &middot; completed' : '' ?>
+        </p>
+        <?php if ($ictDone): ?>
+          <a href="review.php?survey=ict"
+             class="mt-6 text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy hover:text-white transition-colors">
+            VIEW ENTRIES
+          </a>
+        <?php else: ?>
+          <a href="ict-projects.php"
+             class="mt-6 text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+            <?= $ictProjectsCount > 0 ? 'ADD / CONTINUE' : 'START SURVEY' ?>
+          </a>
+        <?php endif; ?>
       </div>
     </div>
 
-    <a href="<?= htmlspecialchars($ctaHref, ENT_QUOTES, 'UTF-8') ?>"
-       class="block text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
-      <?= htmlspecialchars(strtoupper($ctaLabel), ENT_QUOTES, 'UTF-8') ?>
+    <a href="review.php" class="block text-center w-full mt-8 border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy hover:text-white transition-colors">
+      VIEW ALL SUBMITTED FORMS
     </a>
+
+    <?php if ($stage === 'submitted'): ?>
+      <button type="button" id="openSubmitAnother" class="block text-center w-full mt-4 bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+        SUBMIT ANOTHER ENTRY
+      </button>
+    <?php endif; ?>
 
   </div>
 
-</div>
+  </div>
+
+  <div id="submitAnotherModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
+    <div class="bg-white border border-ledger-line shadow-lg max-w-md w-full p-6">
+      <h2 class="font-display text-lg text-ledger-navy">Submit another entry</h2>
+      <p class="text-sm text-ledger-muted mt-2">This will start the survey flow again. You will be asked to fill up both forms in order.</p>
+      <div class="mt-6 flex flex-col gap-3">
+        <form action="resubmit.php" method="POST">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="start" value="app">
+          <button type="submit" class="w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+            Application Systems
+          </button>
+        </form>
+        <form action="resubmit.php" method="POST">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+          <input type="hidden" name="start" value="ict">
+          <button type="submit" class="w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+            ICT Projects
+          </button>
+        </form>
+        <button type="button" id="cancelSubmitAnother" class="text-center w-full border border-ledger-line text-ledger-ink text-sm font-semibold tracking-wide py-2.5 hover:bg-ledger-paper transition-colors">
+          CANCEL
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const modal = document.getElementById('submitAnotherModal');
+      const openBtn = document.getElementById('openSubmitAnother');
+      const cancelBtn = document.getElementById('cancelSubmitAnother');
+
+      function openModal() {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+      function closeModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+
+      if (openBtn) {
+        openBtn.addEventListener('click', openModal);
+      }
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', closeModal);
+      }
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    })();
+  </script>
 
 </body>
 </html>
