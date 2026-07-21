@@ -4,8 +4,12 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
+require_survey_access($pdo, $_SESSION['user_id'], 'projects');
 
-if (get_survey_stage($pdo, $_SESSION['user_id']) === 'submitted') {
+$flow = get_user_flow($pdo, $_SESSION['user_id']);
+$stage = $flow['stage'];
+
+if ($stage === 'submitted') {
     header('Location: survey.php');
     exit;
 }
@@ -24,19 +28,23 @@ $entriesStmt->execute(['id' => $_SESSION['user_id']]);
 $entries = $entriesStmt->fetchAll();
 
 $success = $_SESSION['flash_success'] ?? null;
-unset($_SESSION['flash_success']);
+$errors = $_SESSION['ictproj_summary_errors'] ?? [];
+unset($_SESSION['flash_success'], $_SESSION['ictproj_summary_errors']);
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrfToken = $_SESSION['csrf_token'];
+
+$surveyLabel = $stage === 'first' ? 'Survey 1' : 'Survey 2';
+$confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CONFIRM AND FINALIZE ALL ANSWERS';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Survey 2 Summary — ICT Systems Registry</title>
+<title><?= htmlspecialchars($surveyLabel, ENT_QUOTES, 'UTF-8') ?> Summary — ICT Systems Registry</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
@@ -69,7 +77,7 @@ $csrfToken = $_SESSION['csrf_token'];
 <div class="max-w-4xl mx-auto px-6 py-10">
 
   <div class="text-center mb-8">
-    <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Survey 2 Summary</p>
+    <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1"><?= htmlspecialchars($surveyLabel, ENT_QUOTES, 'UTF-8') ?> Summary</p>
     <h1 class="font-display text-2xl md:text-3xl text-ledger-navy">List of ICT Projects</h1>
     <div class="ledger-rule mt-4 mx-auto" style="max-width: 220px;"></div>
   </div>
@@ -77,6 +85,16 @@ $csrfToken = $_SESSION['csrf_token'];
   <?php if ($success): ?>
     <div class="border border-green-300 bg-green-50 text-green-800 text-sm px-4 py-3 mb-6" role="status">
       <?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if (!empty($errors)): ?>
+    <div class="border border-red-300 bg-red-50 text-red-800 text-sm px-4 py-3 mb-6" role="alert">
+      <ul class="list-disc list-inside space-y-0.5">
+        <?php foreach ($errors as $error): ?>
+          <li><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></li>
+        <?php endforeach; ?>
+      </ul>
     </div>
   <?php endif; ?>
 
@@ -89,6 +107,7 @@ $csrfToken = $_SESSION['csrf_token'];
           <th class="px-4 py-3 font-semibold">Cost</th>
           <th class="px-4 py-3 font-semibold">Provider</th>
           <th class="px-4 py-3 font-semibold">Status</th>
+          <th class="px-4 py-3 font-semibold">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -99,11 +118,19 @@ $csrfToken = $_SESSION['csrf_token'];
           <td class="px-4 py-3"><?= $entry['project_contract_cost'] !== null ? number_format((float) $entry['project_contract_cost'], 2) : '—' ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['third_party_provider'] ?? '—', ENT_QUOTES, 'UTF-8') ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['status'], ENT_QUOTES, 'UTF-8') ?></td>
+          <td class="px-4 py-3 whitespace-nowrap">
+            <a href="edit-ict-project.php?id=<?= (int) $entry['id'] ?>" class="text-ledger-steel font-semibold hover:text-ledger-navy hover:underline">Edit</a>
+            <button type="button" class="delete-entry-btn text-red-600 font-semibold hover:underline ml-3"
+                    data-id="<?= (int) $entry['id'] ?>"
+                    data-name="<?= htmlspecialchars($entry['project_name'], ENT_QUOTES, 'UTF-8') ?>">
+              Delete
+            </button>
+          </td>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($entries)): ?>
         <tr>
-          <td colspan="5" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td>
+          <td colspan="6" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td>
         </tr>
         <?php endif; ?>
       </tbody>
@@ -112,41 +139,70 @@ $csrfToken = $_SESSION['csrf_token'];
 
   <p class="text-center text-sm text-ledger-muted mb-6"><?= count($entries) ?> entr<?= count($entries) === 1 ? 'y' : 'ies' ?> recorded so far.</p>
 
-  <?php if ($ictDone): ?>
-    <div class="border border-green-300 bg-green-50 text-green-800 text-sm px-4 py-3 mb-6" role="status">
-      Survey 2 is complete. Both surveys are now done — you can review and submit everything.
-    </div>
-  <?php endif; ?>
-
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <?php if ($ictDone): ?>
-      <a href="final-review.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
-        FINALIZE &amp; REVIEW
-      </a>
-      <a href="ict-projects.php" class="text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-paper transition-colors">
-        ADD ANOTHER ENTRY
-      </a>
-    <?php else: ?>
-      <a href="ict-projects.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
-        ADD ANOTHER ENTRY
-      </a>
-      <form action="next-form.php" method="POST">
-        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-        <input type="hidden" name="from" value="ict">
-        <button type="submit" class="w-full bg-ledger-steel text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy transition-colors" <?= empty($entries) ? 'disabled' : '' ?>>
-          FINALIZE &amp; REVIEW
-        </button>
-      </form>
-    <?php endif; ?>
-  </div>
-
-  <div class="text-center mt-6">
-    <a href="survey.php" class="text-xs font-semibold tracking-wide text-ledger-muted hover:text-ledger-navy transition-colors">
-      BACK TO SURVEYS
+    <a href="ict-projects.php" class="text-center border-2 border-dashed border-ledger-line text-ledger-steel text-sm font-semibold tracking-wide py-3 hover:border-ledger-steel hover:bg-white transition-colors">
+      SUBMIT ANOTHER ENTRY
     </a>
+    <form action="ict-projects-confirm.php" method="POST">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+      <button type="submit" class="w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors" <?= empty($entries) ? 'disabled' : '' ?>>
+        <?= $confirmLabel ?>
+      </button>
+    </form>
   </div>
 
 </div>
+
+<div id="deleteModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
+  <div class="bg-white border border-ledger-line shadow-lg max-w-md w-full p-6">
+    <h2 class="font-display text-lg text-ledger-navy">Delete this entry?</h2>
+    <p class="text-sm text-ledger-muted mt-2">
+      You're about to delete <span id="deleteEntryName" class="font-semibold text-ledger-ink"></span>. This cannot be undone.
+    </p>
+    <div class="mt-6 flex flex-col gap-3">
+      <form action="delete-ict-project.php" method="POST" id="deleteForm">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+        <input type="hidden" name="id" id="deleteEntryId" value="">
+        <button type="submit" class="w-full bg-red-600 text-white text-sm font-semibold tracking-wide py-3 hover:bg-red-700 transition-colors">
+          CONFIRM DELETE
+        </button>
+      </form>
+      <button type="button" id="cancelDelete" class="text-center w-full border border-ledger-line text-ledger-ink text-sm font-semibold tracking-wide py-2.5 hover:bg-ledger-paper transition-colors">
+        CANCEL
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const modal = document.getElementById('deleteModal');
+    const nameEl = document.getElementById('deleteEntryName');
+    const idInput = document.getElementById('deleteEntryId');
+    const cancelBtn = document.getElementById('cancelDelete');
+
+    document.querySelectorAll('.delete-entry-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        idInput.value = btn.getAttribute('data-id');
+        nameEl.textContent = btn.getAttribute('data-name');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      });
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    });
+  })();
+</script>
 
 </body>
 </html>

@@ -15,17 +15,10 @@ if (empty($_POST['csrf_token']) || empty($_SESSION['csrf_token']) ||
 }
 
 $pdo = getDbConnection();
-$progress = get_survey_progress($pdo, $_SESSION['user_id']);
+require_review_stage($pdo, $_SESSION['user_id']);
 
-if (!$progress['both_done']) {
-    header('Location: survey.php');
-    exit;
-}
+finalize_submission($pdo, $_SESSION['user_id']);
 
-require_stage($pdo, $_SESSION['user_id'], 'review');
-
-set_survey_stage($pdo, $_SESSION['user_id'], 'submitted');
-
-$_SESSION['flash_success'] = 'Your forms have been recorded. Thank you for completing the survey.';
+$_SESSION['flash_success'] = 'Your survey has been submitted and recorded.';
 header('Location: survey.php');
 exit;

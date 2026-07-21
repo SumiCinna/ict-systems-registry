@@ -4,7 +4,7 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
-$stage = get_survey_stage($pdo, $_SESSION['user_id']);
+$stage = get_user_flow($pdo, $_SESSION['user_id'])['stage'];
 
 $stmt = $pdo->prepare('SELECT agency_name, submitted_at FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
@@ -128,7 +128,7 @@ if ($singleSurvey === 'app' || $singleSurvey === 'ict') {
 }
 
 if ($stage !== 'review' && $stage !== 'submitted') {
-    header('Location: ' . stage_redirect_target($stage));
+    header('Location: ' . current_flow_url($pdo, $_SESSION['user_id']));
     exit;
 }
 

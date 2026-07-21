@@ -15,8 +15,7 @@ if (empty($_POST['csrf_token']) || empty($_SESSION['csrf_token']) ||
 }
 
 $pdo = getDbConnection();
-require_not_submitted($pdo, $_SESSION['user_id']);
-enforce_survey_lock($pdo, $_SESSION['user_id'], 'ict');
+require_survey_access($pdo, $_SESSION['user_id'], 'projects');
 
 $countStmt = $pdo->prepare('SELECT COUNT(*) AS total FROM ict_projects WHERE user_id = :id');
 $countStmt->execute(['id' => $_SESSION['user_id']]);
@@ -27,8 +26,4 @@ if ($count === 0) {
     exit;
 }
 
-mark_survey_done($pdo, $_SESSION['user_id'], 'ict');
-
-$progress = get_survey_progress($pdo, $_SESSION['user_id']);
-header('Location: ' . ($progress['app_done'] ? 'review.php' : 'application-systems.php'));
-exit;
+confirm_survey_step($pdo, $_SESSION['user_id'], 'projects');
