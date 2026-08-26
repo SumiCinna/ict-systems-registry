@@ -4,15 +4,12 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
-require_survey_access($pdo, $_SESSION['user_id'], 'systems');
+require_summary_access($pdo, $_SESSION['user_id'], 'systems');
 
+$pageType = 'systems';
 $flow = get_user_flow($pdo, $_SESSION['user_id']);
 $stage = $flow['stage'];
-
-if ($stage === 'submitted') {
-    header('Location: survey.php');
-    exit;
-}
+$isSubmitted = $stage === 'submitted';
 
 $stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
@@ -23,9 +20,15 @@ if (!$user) {
     exit;
 }
 
-$entriesStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id ORDER BY id ASC');
-$entriesStmt->execute(['id' => $_SESSION['user_id']]);
+$currentBatch = get_active_batch($pdo, $_SESSION['user_id']);
+$entriesStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id AND batch = :batch ORDER BY id ASC');
+$entriesStmt->execute(['id' => $_SESSION['user_id'], 'batch' => $currentBatch]);
 $entries = $entriesStmt->fetchAll();
+
+$progress = get_survey_progress($pdo, $_SESSION['user_id']);
+$isFirstSurvey = $pageType === $progress['first_survey_type'];
+$surveyLabel = $isFirstSurvey ? 'Survey 1' : 'Survey 2';
+$confirmLabel = $isFirstSurvey ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CONFIRM AND FINALIZE ALL ANSWERS';
 
 $success = $_SESSION['flash_success'] ?? null;
 $errors = $_SESSION['appsys_summary_errors'] ?? [];
@@ -35,9 +38,6 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 $csrfToken = $_SESSION['csrf_token'];
-
-$surveyLabel = $stage === 'first' ? 'Survey 1' : 'Survey 2';
-$confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CONFIRM AND FINALIZE ALL ANSWERS';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -65,16 +65,23 @@ $confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CON
 <body class="bg-ledger-paper font-body text-ledger-ink min-h-screen">
 
 <header class="bg-ledger-navy text-white">
-  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
     <div>
       <p class="text-[10px] tracking-[0.25em] uppercase text-white/60">ICT Systems &amp; Projects Registry</p>
       <p class="font-display text-lg"><?= htmlspecialchars($user['agency_name'], ENT_QUOTES, 'UTF-8') ?></p>
     </div>
-    <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">LOG OUT</a>
+    <div class="flex items-center gap-4">
+      <?php if ($isSubmitted): ?>
+      <a href="survey.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
+        BACK TO SURVEYS
+      </a>
+      <?php endif; ?>
+      <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">LOG OUT</a>
+    </div>
   </div>
 </header>
 
-<div class="max-w-4xl mx-auto px-6 py-10">
+<div class="max-w-7xl mx-auto px-6 py-10">
 
   <div class="text-center mb-8">
     <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1"><?= htmlspecialchars($surveyLabel, ENT_QUOTES, 'UTF-8') ?> Summary</p>
@@ -103,9 +110,16 @@ $confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CON
       <thead>
         <tr class="bg-ledger-navy text-white text-left">
           <th class="px-4 py-3 font-semibold">Application</th>
+          <th class="px-4 py-3 font-semibold">Date Implemented</th>
           <th class="px-4 py-3 font-semibold">Strategy</th>
+          <th class="px-4 py-3 font-semibold">Own IP</th>
           <th class="px-4 py-3 font-semibold">Mode</th>
+          <th class="px-4 py-3 font-semibold">Acquisition Cost</th>
+          <th class="px-4 py-3 font-semibold">Annual Maint. Cost</th>
+          <th class="px-4 py-3 font-semibold">Annual Txn Amount</th>
           <th class="px-4 py-3 font-semibold">Users</th>
+          <th class="px-4 py-3 font-semibold">Info Type</th>
+          <th class="px-4 py-3 font-semibold">Scope</th>
           <th class="px-4 py-3 font-semibold">Status</th>
           <th class="px-4 py-3 font-semibold">Actions</th>
         </tr>
@@ -114,9 +128,16 @@ $confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CON
         <?php foreach ($entries as $entry): ?>
         <tr class="border-t border-ledger-line">
           <td class="px-4 py-3"><?= htmlspecialchars($entry['application_name_version'], ENT_QUOTES, 'UTF-8') ?></td>
+          <td class="px-4 py-3"><?= $entry['date_of_implementation'] ? htmlspecialchars($entry['date_of_implementation'], ENT_QUOTES, 'UTF-8') : '—' ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['development_strategy'], ENT_QUOTES, 'UTF-8') ?></td>
+          <td class="px-4 py-3"><?= htmlspecialchars($entry['owns_ip'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['mode_of_implementation'], ENT_QUOTES, 'UTF-8') ?></td>
+          <td class="px-4 py-3"><?= $entry['acquisition_cost'] !== null ? number_format((float) $entry['acquisition_cost'], 2) : '—' ?></td>
+          <td class="px-4 py-3"><?= $entry['annual_maintenance_cost'] !== null ? number_format((float) $entry['annual_maintenance_cost'], 2) : '—' ?></td>
+          <td class="px-4 py-3"><?= $entry['annual_transaction_amount'] !== null ? number_format((float) $entry['annual_transaction_amount'], 2) : '—' ?></td>
           <td class="px-4 py-3"><?= $entry['no_of_users'] !== null ? htmlspecialchars($entry['no_of_users'], ENT_QUOTES, 'UTF-8') : '—' ?></td>
+          <td class="px-4 py-3"><?= htmlspecialchars($entry['type_of_information'], ENT_QUOTES, 'UTF-8') ?></td>
+          <td class="px-4 py-3"><?= htmlspecialchars($entry['scope_of_operation'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['status'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="px-4 py-3 whitespace-nowrap">
             <a href="edit-application-system.php?id=<?= (int) $entry['id'] ?>" class="text-ledger-steel font-semibold hover:text-ledger-navy hover:underline">Edit</a>
@@ -130,7 +151,7 @@ $confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CON
         <?php endforeach; ?>
         <?php if (empty($entries)): ?>
         <tr>
-          <td colspan="6" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td>
+          <td colspan="13" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td>
         </tr>
         <?php endif; ?>
       </tbody>
@@ -143,12 +164,18 @@ $confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CON
     <a href="application-systems.php" class="text-center border-2 border-dashed border-ledger-line text-ledger-steel text-sm font-semibold tracking-wide py-3 hover:border-ledger-steel hover:bg-white transition-colors">
       SUBMIT ANOTHER ENTRY
     </a>
+    <?php if ($isSubmitted): ?>
+    <a href="survey.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+      BACK TO SURVEYS
+    </a>
+    <?php else: ?>
     <form action="application-systems-confirm.php" method="POST">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
       <button type="submit" class="w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors" <?= empty($entries) ? 'disabled' : '' ?>>
         <?= $confirmLabel ?>
       </button>
     </form>
+    <?php endif; ?>
   </div>
 
 </div>
@@ -190,10 +217,12 @@ $confirmLabel = $stage === 'first' ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CON
       });
     });
 
-    cancelBtn.addEventListener('click', () => {
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
-    });
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      });
+    }
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {

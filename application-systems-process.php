@@ -118,15 +118,17 @@ try {
         exit;
     }
 
+    $batch = get_current_batch($pdo, $_SESSION['user_id']);
+
     $insertStmt = $pdo->prepare(
         'INSERT INTO application_systems
             (user_id, agency_name, application_name_version, date_of_implementation, development_strategy,
              owns_ip, mode_of_implementation, acquisition_cost, annual_maintenance_cost, annual_transaction_amount,
-             no_of_users, type_of_information, scope_of_operation, status)
+             no_of_users, type_of_information, scope_of_operation, status, batch)
          VALUES
             (:user_id, :agency_name, :application_name_version, :date_of_implementation, :development_strategy,
              :owns_ip, :mode_of_implementation, :acquisition_cost, :annual_maintenance_cost, :annual_transaction_amount,
-             :no_of_users, :type_of_information, :scope_of_operation, :status)'
+             :no_of_users, :type_of_information, :scope_of_operation, :status, :batch)'
     );
 
     $insertStmt->execute([
@@ -144,14 +146,10 @@ try {
         'type_of_information' => $typeOfInformation,
         'scope_of_operation' => $scopeOfOperation,
         'status' => $status,
+        'batch' => $batch,
     ]);
 
     $_SESSION['flash_success'] = 'Application system saved.';
-
-    if (get_user_flow($pdo, $_SESSION['user_id'])['stage'] === 'submitted') {
-        header('Location: survey.php');
-        exit;
-    }
 
     header('Location: application-systems-summary.php');
     exit;

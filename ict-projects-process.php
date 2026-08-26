@@ -82,13 +82,15 @@ if (!empty($errors)) {
 }
 
 try {
+    $batch = get_current_batch($pdo, $_SESSION['user_id']);
+
     $insertStmt = $pdo->prepare(
         'INSERT INTO ict_projects
             (user_id, project_name, description, start_date, end_date,
-             project_contract_cost, third_party_provider, funding_source, status)
+             project_contract_cost, third_party_provider, funding_source, status, batch)
          VALUES
             (:user_id, :project_name, :description, :start_date, :end_date,
-             :project_contract_cost, :third_party_provider, :funding_source, :status)'
+             :project_contract_cost, :third_party_provider, :funding_source, :status, :batch)'
     );
 
     $insertStmt->execute([
@@ -101,14 +103,10 @@ try {
         'third_party_provider' => $thirdPartyProvider !== '' ? $thirdPartyProvider : null,
         'funding_source' => $fundingSource !== '' ? $fundingSource : null,
         'status' => $status,
+        'batch' => $batch,
     ]);
 
     $_SESSION['flash_success'] = 'ICT project saved.';
-
-    if (get_user_flow($pdo, $_SESSION['user_id'])['stage'] === 'submitted') {
-        header('Location: survey.php');
-        exit;
-    }
 
     header('Location: ict-projects-summary.php');
     exit;
