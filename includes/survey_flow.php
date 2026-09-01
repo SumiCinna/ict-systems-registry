@@ -14,6 +14,21 @@ function count_all_entries(PDO $pdo, int $userId): int
     return $appCount + $ictCount;
 }
 
+// Total entries of one survey type across ALL batches (current + past),
+// for display purposes — e.g. the "VIEW ENTRY" cards on survey.php, which
+// should agree with what submission-history.php shows. Unlike
+// get_survey_progress()'s app_count/ict_count (which are scoped to the
+// active batch on purpose, for in-progress-cycle logic like whether a
+// fresh cycle already has entries), this is deliberately NOT
+// batch-filtered.
+function count_entries_by_type(PDO $pdo, int $userId, string $type): int
+{
+    $table = $type === 'systems' ? 'application_systems' : 'ict_projects';
+    $stmt = $pdo->prepare("SELECT COUNT(*) AS total FROM {$table} WHERE user_id = :id");
+    $stmt->execute(['id' => $userId]);
+    return (int) $stmt->fetch()['total'];
+}
+
 function get_user_flow(PDO $pdo, int $userId): array
 {
     $stmt = $pdo->prepare('SELECT survey_stage, first_survey_type FROM users WHERE id = :id LIMIT 1');
@@ -109,6 +124,17 @@ function require_survey_access(PDO $pdo, int $userId, string $pageType): void
         return;
     }
     if ($stage === $pageType) {
+        return;
+    }
+
+    // Survey already confirmed, but you're adding one more entry to it
+    // (e.g. via "SUBMIT ANOTHER ENTRY" from its own summary) while the
+    // flow has since moved on to the other survey. Allow it — this
+    // doesn't reopen or affect the flow's current stage, just like
+    // require_summary_access() already allows viewing it in this case.
+    $progress = get_survey_progress($pdo, $userId);
+    $done = $pageType === 'systems' ? $progress['app_done'] : $progress['ict_done'];
+    if ($done) {
         return;
     }
 
@@ -220,6 +246,29 @@ function get_active_batch(PDO $pdo, int $userId): int
     $stage = get_survey_stage($pdo, $userId);
     $currentBatch = get_current_batch($pdo, $userId);
     return $stage === 'submitted' ? max(1, $currentBatch - 1) : $currentBatch;
+}
+
+// Batches strictly before current_batch have already been left behind by a
+// finalized submission (finalize_submission() is the only thing that bumps
+// current_batch), so this is always genuinely "past, already-submitted"
+// data — never the batch someone is currently filling out.
+function get_past_batches(PDO $pdo, int $userId): array
+{
+    $currentBatch = get_current_batch($pdo, $userId);
+
+    $stmt = $pdo->prepare(
+        'SELECT batch, COUNT(*) AS entry_count, MIN(created_at) AS first_saved, MAX(created_at) AS last_saved
+         FROM (
+             SELECT batch, created_at FROM application_systems WHERE user_id = :id1
+             UNION ALL
+             SELECT batch, created_at FROM ict_projects WHERE user_id = :id2
+         ) AS combined
+         WHERE batch < :current_batch
+         GROUP BY batch
+         ORDER BY batch DESC'
+    );
+    $stmt->execute(['id1' => $userId, 'id2' => $userId, 'current_batch' => $currentBatch]);
+    return $stmt->fetchAll();
 }
 
 function get_survey_progress(PDO $pdo, int $userId): array

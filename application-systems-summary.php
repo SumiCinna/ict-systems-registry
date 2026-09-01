@@ -11,6 +11,10 @@ $flow = get_user_flow($pdo, $_SESSION['user_id']);
 $stage = $flow['stage'];
 $isSubmitted = $stage === 'submitted';
 
+// Reached via survey.php's "VIEW ENTRY" — a look-only view, never editable,
+// regardless of whether this survey is still in progress or long finalized.
+$isReadOnly = isset($_GET['view']) && $_GET['view'] === 'readonly';
+
 $stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
 $user = $stmt->fetch();
@@ -21,14 +25,37 @@ if (!$user) {
 }
 
 $currentBatch = get_active_batch($pdo, $_SESSION['user_id']);
-$entriesStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id AND batch = :batch ORDER BY id ASC');
-$entriesStmt->execute(['id' => $_SESSION['user_id'], 'batch' => $currentBatch]);
+if ($isReadOnly) {
+    // Read-only view is reached from survey.php's "VIEW ENTRY", whose count
+    // now spans all batches (see count_entries_by_type()) — so this listing
+    // must match by not filtering to the active batch either.
+    $entriesStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id ORDER BY batch ASC, id ASC');
+    $entriesStmt->execute(['id' => $_SESSION['user_id']]);
+} else {
+    // Editable view (Edit/Delete/Confirm) must stay scoped to the current
+    // cycle only — past, already-submitted entries must never be editable
+    // or counted toward "confirm & continue" here.
+    $entriesStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id AND batch = :batch ORDER BY id ASC');
+    $entriesStmt->execute(['id' => $_SESSION['user_id'], 'batch' => $currentBatch]);
+}
 $entries = $entriesStmt->fetchAll();
 
 $progress = get_survey_progress($pdo, $_SESSION['user_id']);
 $isFirstSurvey = $pageType === $progress['first_survey_type'];
 $surveyLabel = $isFirstSurvey ? 'Survey 1' : 'Survey 2';
 $confirmLabel = $isFirstSurvey ? 'CONFIRM &amp; CONTINUE TO SURVEY 2' : 'CONFIRM AND FINALIZE ALL ANSWERS';
+
+// True when you're looking at THIS survey's summary after already
+// confirming it and moving on (e.g. navigated back from the other
+// survey). In that case the flow's real current stage is elsewhere,
+// so the confirm button/label above would be stale — show a plain
+// "return to where you left off" link instead.
+$done = $pageType === 'systems' ? $progress['app_done'] : $progress['ict_done'];
+$viewingCompleted = !$isSubmitted && $stage !== $pageType && $done;
+$resumeUrl = $viewingCompleted ? current_flow_url($pdo, $_SESSION['user_id']) : '';
+$resumeLabel = $stage === 'review'
+    ? 'RETURN TO REVIEW'
+    : 'RETURN TO ' . ($stage === $progress['first_survey_type'] ? 'SURVEY 1' : 'SURVEY 2');
 
 $success = $_SESSION['flash_success'] ?? null;
 $errors = $_SESSION['appsys_summary_errors'] ?? [];
@@ -71,7 +98,7 @@ $csrfToken = $_SESSION['csrf_token'];
       <p class="font-display text-lg"><?= htmlspecialchars($user['agency_name'], ENT_QUOTES, 'UTF-8') ?></p>
     </div>
     <div class="flex items-center gap-4">
-      <?php if ($isSubmitted): ?>
+      <?php if ($isSubmitted || $isReadOnly): ?>
       <a href="survey.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
         BACK TO SURVEYS
       </a>
@@ -121,7 +148,9 @@ $csrfToken = $_SESSION['csrf_token'];
           <th class="px-4 py-3 font-semibold">Info Type</th>
           <th class="px-4 py-3 font-semibold">Scope</th>
           <th class="px-4 py-3 font-semibold">Status</th>
+          <?php if (!$isReadOnly): ?>
           <th class="px-4 py-3 font-semibold">Actions</th>
+          <?php endif; ?>
         </tr>
       </thead>
       <tbody>
@@ -139,6 +168,7 @@ $csrfToken = $_SESSION['csrf_token'];
           <td class="px-4 py-3"><?= htmlspecialchars($entry['type_of_information'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['scope_of_operation'], ENT_QUOTES, 'UTF-8') ?></td>
           <td class="px-4 py-3"><?= htmlspecialchars($entry['status'], ENT_QUOTES, 'UTF-8') ?></td>
+          <?php if (!$isReadOnly): ?>
           <td class="px-4 py-3 whitespace-nowrap">
             <a href="edit-application-system.php?id=<?= (int) $entry['id'] ?>" class="text-ledger-steel font-semibold hover:text-ledger-navy hover:underline">Edit</a>
             <button type="button" class="delete-entry-btn text-red-600 font-semibold hover:underline ml-3"
@@ -147,11 +177,12 @@ $csrfToken = $_SESSION['csrf_token'];
               Delete
             </button>
           </td>
+          <?php endif; ?>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($entries)): ?>
         <tr>
-          <td colspan="13" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td>
+          <td colspan="<?= $isReadOnly ? 12 : 13 ?>" class="px-4 py-6 text-center text-ledger-muted">No entries yet.</td>
         </tr>
         <?php endif; ?>
       </tbody>
@@ -160,6 +191,13 @@ $csrfToken = $_SESSION['csrf_token'];
 
   <p class="text-center text-sm text-ledger-muted mb-6"><?= count($entries) ?> entr<?= count($entries) === 1 ? 'y' : 'ies' ?> recorded so far.</p>
 
+  <?php if ($isReadOnly): ?>
+  <div class="grid grid-cols-1 gap-4">
+    <a href="survey.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+      BACK TO SURVEYS
+    </a>
+  </div>
+  <?php else: ?>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     <a href="application-systems.php" class="text-center border-2 border-dashed border-ledger-line text-ledger-steel text-sm font-semibold tracking-wide py-3 hover:border-ledger-steel hover:bg-white transition-colors">
       SUBMIT ANOTHER ENTRY
@@ -167,6 +205,10 @@ $csrfToken = $_SESSION['csrf_token'];
     <?php if ($isSubmitted): ?>
     <a href="survey.php" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
       BACK TO SURVEYS
+    </a>
+    <?php elseif ($viewingCompleted): ?>
+    <a href="<?= htmlspecialchars($resumeUrl, ENT_QUOTES, 'UTF-8') ?>" class="text-center w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
+      <?= $resumeLabel ?>
     </a>
     <?php else: ?>
     <form action="application-systems-confirm.php" method="POST">
@@ -177,9 +219,11 @@ $csrfToken = $_SESSION['csrf_token'];
     </form>
     <?php endif; ?>
   </div>
+  <?php endif; ?>
 
 </div>
 
+<?php if (!$isReadOnly): ?>
 <div id="deleteModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
   <div class="bg-white border border-ledger-line shadow-lg max-w-md w-full p-6">
     <h2 class="font-display text-lg text-ledger-navy">Delete this entry?</h2>
@@ -232,6 +276,7 @@ $csrfToken = $_SESSION['csrf_token'];
     });
   })();
 </script>
+<?php endif; ?>
 
 </body>
 </html>

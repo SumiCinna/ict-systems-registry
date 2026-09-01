@@ -7,15 +7,28 @@ $pdo = getDbConnection();
 require_survey_access($pdo, $_SESSION['user_id'], 'projects');
 
 $progress = get_survey_progress($pdo, $_SESSION['user_id']);
-if ($progress['first_survey_type'] === 'systems') {
-    // Systems is survey 1 — this (projects) is survey 2. Back goes to
-    // survey 1's summary, not the chooser (which no longer applies).
-    $backUrl = survey_summary_url('systems');
-    $backLabel = 'BACK TO SYSTEMS SUMMARY';
+$backLinks = [];
+
+if ($progress['ict_count'] > 0) {
+    // Already have entries in this survey — most likely here via "SUBMIT
+    // ANOTHER ENTRY" from its own summary, so that's the primary target.
+    $backLinks[] = ['url' => survey_summary_url('projects'), 'label' => 'BACK TO SUMMARY'];
+
+    // The other survey's summary may ALSO be reachable (already
+    // confirmed), and you might genuinely want to jump back there instead
+    // of your own summary. Rather than guess which one "back" means,
+    // offer both explicitly.
+    if ($progress['app_done']) {
+        $backLinks[] = ['url' => survey_summary_url('systems'), 'label' => 'BACK TO SYSTEMS SUMMARY'];
+    }
+} elseif ($progress['first_survey_type'] === 'systems') {
+    // Systems is survey 1 — this (projects) is survey 2, and this is the
+    // very first time here (no entries yet). Back goes to survey 1's
+    // summary, not the chooser (which no longer applies).
+    $backLinks[] = ['url' => survey_summary_url('systems'), 'label' => 'BACK TO SYSTEMS SUMMARY'];
 } else {
     // This is survey 1 (or nothing picked yet) — back goes to the chooser.
-    $backUrl = 'survey.php';
-    $backLabel = 'BACK TO SURVEY';
+    $backLinks[] = ['url' => 'survey.php', 'label' => 'BACK TO SURVEY'];
 }
 
 $stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
@@ -78,9 +91,11 @@ function sel(array $entry, string $key, string $option): string
       <p class="font-display text-lg"><?= htmlspecialchars($user['agency_name'], ENT_QUOTES, 'UTF-8') ?></p>
     </div>
     <div class="flex items-center gap-4">
-      <a href="<?= htmlspecialchars($backUrl, ENT_QUOTES, 'UTF-8') ?>" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
-        <?= htmlspecialchars($backLabel, ENT_QUOTES, 'UTF-8') ?>
+      <?php foreach ($backLinks as $link): ?>
+      <a href="<?= htmlspecialchars($link['url'], ENT_QUOTES, 'UTF-8') ?>" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
+        <?= htmlspecialchars($link['label'], ENT_QUOTES, 'UTF-8') ?>
       </a>
+      <?php endforeach; ?>
       <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
         LOG OUT
       </a>

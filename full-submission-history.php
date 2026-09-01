@@ -4,19 +4,8 @@ require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/survey_flow.php';
 
 $pdo = getDbConnection();
-$progress = get_survey_progress($pdo, $_SESSION['user_id']);
 
-if (!$progress['both_done']) {
-    header('Location: survey.php');
-    exit;
-}
-
-if (get_survey_stage($pdo, $_SESSION['user_id']) === 'submitted') {
-    header('Location: survey.php');
-    exit;
-}
-
-$stmt = $pdo->prepare('SELECT agency_name, submitted_at FROM users WHERE id = :id LIMIT 1');
+$stmt = $pdo->prepare('SELECT agency_name FROM users WHERE id = :id LIMIT 1');
 $stmt->execute(['id' => $_SESSION['user_id']]);
 $user = $stmt->fetch();
 
@@ -25,27 +14,26 @@ if (!$user) {
     exit;
 }
 
-$currentBatch = get_active_batch($pdo, $_SESSION['user_id']);
+// Every batch strictly before current_batch has already been finalized by
+// finalize_submission() (the only thing that bumps current_batch), so this
+// pulls every entry from every submitted cycle in one flat list — no
+// per-cycle grouping or navigation, unlike submission-history.php.
+$currentBatch = get_current_batch($pdo, $_SESSION['user_id']);
 
-$appSystemsStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id AND batch = :batch ORDER BY id ASC');
-$appSystemsStmt->execute(['id' => $_SESSION['user_id'], 'batch' => $currentBatch]);
-$appSystems = $appSystemsStmt->fetchAll();
+$appStmt = $pdo->prepare('SELECT * FROM application_systems WHERE user_id = :id AND batch < :current_batch ORDER BY id ASC');
+$appStmt->execute(['id' => $_SESSION['user_id'], 'current_batch' => $currentBatch]);
+$appSystems = $appStmt->fetchAll();
 
-$ictProjectsStmt = $pdo->prepare('SELECT * FROM ict_projects WHERE user_id = :id AND batch = :batch ORDER BY id ASC');
-$ictProjectsStmt->execute(['id' => $_SESSION['user_id'], 'batch' => $currentBatch]);
-$ictProjects = $ictProjectsStmt->fetchAll();
-
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-$csrfToken = $_SESSION['csrf_token'];
+$ictStmt = $pdo->prepare('SELECT * FROM ict_projects WHERE user_id = :id AND batch < :current_batch ORDER BY id ASC');
+$ictStmt->execute(['id' => $_SESSION['user_id'], 'current_batch' => $currentBatch]);
+$ictProjects = $ictStmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Final Review — ICT Systems Registry</title>
+<title>Full Submission History — ICT Systems Registry</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
@@ -71,20 +59,26 @@ $csrfToken = $_SESSION['csrf_token'];
       <p class="text-[10px] tracking-[0.25em] uppercase text-white/60">ICT Systems &amp; Projects Registry</p>
       <p class="font-display text-lg"><?= htmlspecialchars($user['agency_name'], ENT_QUOTES, 'UTF-8') ?></p>
     </div>
-    <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">LOG OUT</a>
+    <div class="flex items-center gap-4">
+      <a href="survey.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">
+        BACK TO SURVEYS
+      </a>
+      <a href="logout.php" class="text-xs font-semibold tracking-wide border border-white/30 px-4 py-2 hover:bg-white/10 transition-colors">LOG OUT</a>
+    </div>
   </div>
 </header>
 
-<div class="max-w-5xl mx-auto px-6 py-10">
+<div class="max-w-7xl mx-auto px-6 py-10">
 
   <div class="text-center mb-8">
-    <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Final Review</p>
-    <h1 class="font-display text-2xl md:text-3xl text-ledger-navy">Review both surveys before submitting</h1>
+    <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Read-Only Archive</p>
+    <h1 class="font-display text-2xl md:text-3xl text-ledger-navy">Full Submission History</h1>
+    <p class="text-sm text-ledger-muted mt-2">Every entry you've ever submitted, across every round.</p>
     <div class="ledger-rule mt-4 mx-auto" style="max-width: 220px;"></div>
   </div>
 
   <div class="mb-10">
-    <h2 class="font-display text-xl text-ledger-navy mb-4">Survey 1 — List of Application Systems (<?= count($appSystems) ?>)</h2>
+    <h2 class="font-display text-xl text-ledger-navy mb-4">Application Systems (<?= count($appSystems) ?>)</h2>
     <div class="bg-white border border-ledger-line shadow-sm overflow-x-auto">
       <table class="w-full text-xs">
         <thead>
@@ -107,15 +101,15 @@ $csrfToken = $_SESSION['csrf_token'];
           </tr>
           <?php endforeach; ?>
           <?php if (empty($appSystems)): ?>
-          <tr><td colspan="5" class="px-4 py-6 text-center text-ledger-muted">No entries.</td></tr>
+          <tr><td colspan="5" class="px-4 py-6 text-center text-ledger-muted">No submitted entries yet.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
     </div>
   </div>
 
-  <div class="mb-10">
-    <h2 class="font-display text-xl text-ledger-navy mb-4">Survey 2 — List of ICT Projects (<?= count($ictProjects) ?>)</h2>
+  <div class="mb-4">
+    <h2 class="font-display text-xl text-ledger-navy mb-4">ICT Projects (<?= count($ictProjects) ?>)</h2>
     <div class="bg-white border border-ledger-line shadow-sm overflow-x-auto">
       <table class="w-full text-xs">
         <thead>
@@ -138,31 +132,11 @@ $csrfToken = $_SESSION['csrf_token'];
           </tr>
           <?php endforeach; ?>
           <?php if (empty($ictProjects)): ?>
-          <tr><td colspan="5" class="px-4 py-6 text-center text-ledger-muted">No entries.</td></tr>
+          <tr><td colspan="5" class="px-4 py-6 text-center text-ledger-muted">No submitted entries yet.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
     </div>
-  </div>
-
-  <form action="submit-confirm.php" method="POST">
-    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-    <button type="submit" class="w-full bg-ledger-navy text-white text-sm font-semibold tracking-wide py-3 hover:bg-ledger-steel transition-colors">
-      FINISH &amp; SUBMIT ALL
-    </button>
-  </form>
-
-  <div class="text-center mt-6 flex items-center justify-center gap-6">
-    <?php /* "BACK TO SURVEYS" used to point at survey.php, which just
-       redirects straight back here while both surveys are done but not
-       yet finalized — a dead end. Link to the actual editable summaries
-       instead, so there's somewhere real to go back to. */ ?>
-    <a href="<?= htmlspecialchars(survey_summary_url('systems'), ENT_QUOTES, 'UTF-8') ?>" class="text-xs font-semibold tracking-wide text-ledger-muted hover:text-ledger-navy transition-colors">
-      BACK TO SYSTEMS SUMMARY
-    </a>
-    <a href="<?= htmlspecialchars(survey_summary_url('projects'), ENT_QUOTES, 'UTF-8') ?>" class="text-xs font-semibold tracking-wide text-ledger-muted hover:text-ledger-navy transition-colors">
-      BACK TO PROJECTS SUMMARY
-    </a>
   </div>
 
 </div>

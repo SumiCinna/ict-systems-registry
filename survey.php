@@ -24,10 +24,17 @@ if (empty($_SESSION['csrf_token'])) {
 }
 $csrfToken = $_SESSION['csrf_token'];
 
-// Mid-flow with at least one entry already saved: survey.php is not a valid
-// stopping point. Send the user straight back into whatever comes next
-// instead of showing a dashboard that leads nowhere useful.
-if ($stage !== 'submitted' && $totalEntries > 0) {
+$first_type_for_guard = $progress['first_survey_type'];
+$pastBatches = get_past_batches($pdo, $_SESSION['user_id']);
+
+// Still on survey 1 (the first survey picked, not yet confirmed done): let
+// the "BACK TO SURVEY" button from the entry form land here and show the
+// dashboard below, so the user can see what they've entered so far. Any
+// other mid-flow state (survey 2, review) still isn't a valid stopping
+// point — send the user straight back into whatever comes next instead of
+// showing a dashboard that leads nowhere useful there.
+$onFirstSurveyInProgress = $first_type_for_guard !== null && $stage === $first_type_for_guard;
+if ($stage !== 'submitted' && $totalEntries > 0 && !$onFirstSurveyInProgress) {
     header('Location: ' . current_flow_url($pdo, $_SESSION['user_id']));
     exit;
 }
@@ -72,7 +79,7 @@ if ($stage !== 'submitted' && $totalEntries === 0) {
       </div>
     </header>
 
-    <div class="max-w-3xl mx-auto px-6 py-10">
+    <div class="max-w-5xl mx-auto px-6 py-10">
 
       <div class="text-center mb-10">
         <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Annual Survey</p>
@@ -102,6 +109,14 @@ if ($stage !== 'submitted' && $totalEntries === 0) {
         </form>
       </div>
 
+      <?php if (!empty($pastBatches)): ?>
+      <div class="text-center mt-8">
+        <a href="submission-history.php" class="text-xs font-semibold tracking-wide text-ledger-muted hover:text-ledger-navy transition-colors">
+          VIEW PAST SUBMISSIONS
+        </a>
+      </div>
+      <?php endif; ?>
+
     </div>
 
     </body>
@@ -110,12 +125,26 @@ if ($stage !== 'submitted' && $totalEntries === 0) {
     exit;
 }
 
-// Only reachable once stage === 'submitted': the real dashboard.
+// Reachable once stage === 'submitted' (the real, final dashboard) or while
+// still on survey 1, in progress (via the "BACK TO SURVEY" button on the
+// entry form) — the real dashboard.
 $first = $progress['first_survey_type'];
 $secondType = $first !== null ? other_survey_type($first) : null;
 $appDone = $progress['app_done'];
 $ictDone = $progress['ict_done'];
 $bothDone = $appDone && $ictDone;
+
+// Per-card figures. Survey 2 may not have been started at all yet (still
+// mid survey 1), in which case there's nothing to view — no link, no
+// "completed" claim.
+$firstDone = $first === 'systems' ? $appDone : $ictDone;
+$firstCount = $first !== null ? count_entries_by_type($pdo, $_SESSION['user_id'], $first) : 0;
+$firstUrl = $first !== null ? survey_summary_url($first) : null;
+
+$secondDone = $secondType === 'systems' ? $appDone : $ictDone;
+$secondCount = $secondType !== null ? count_entries_by_type($pdo, $_SESSION['user_id'], $secondType) : 0;
+$secondStarted = $secondCount > 0 || $secondDone;
+$secondUrl = $secondType !== null ? survey_summary_url($secondType) : null;
 
 $success = $_SESSION['flash_success'] ?? null;
 unset($_SESSION['flash_success']);
@@ -161,7 +190,7 @@ unset($_SESSION['flash_success']);
   </div>
 </header>
 
-<div class="max-w-3xl mx-auto px-6 py-10">
+<div class="max-w-5xl mx-auto px-6 py-10">
 
   <div class="text-center mb-10">
     <p class="text-xs tracking-[0.25em] uppercase text-ledger-muted mb-1">Annual Survey</p>
@@ -182,24 +211,30 @@ unset($_SESSION['flash_success']);
         <p class="text-xs tracking-[0.2em] uppercase text-ledger-gold">Survey 1</p>
         <h3 class="font-display text-xl text-ledger-navy mt-1"><?= $first !== null ? htmlspecialchars(survey_label($first), ENT_QUOTES, 'UTF-8') : 'List of Application Systems' ?></h3>
         <p class="text-sm text-ledger-muted mt-1">
-          <?= $first === 'systems' ? $progress['app_count'] : ($first === 'projects' ? $progress['ict_count'] : $progress['app_count']) ?> entries &middot; completed
+          <?= $firstCount ?> entr<?= $firstCount === 1 ? 'y' : 'ies' ?> &middot; <?= $firstDone ? 'completed' : 'in progress' ?>
         </p>
-        <a href="review.php?survey=<?= $first === 'projects' ? 'ict' : 'app' ?>"
+        <?php if ($firstUrl !== null): ?>
+        <a href="<?= htmlspecialchars($firstUrl . '?view=readonly', ENT_QUOTES, 'UTF-8') ?>"
            class="mt-6 text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy hover:text-white transition-colors">
           VIEW ENTRY
         </a>
+        <?php endif; ?>
       </div>
 
       <div class="border border-ledger-line bg-white p-8 flex flex-col">
         <p class="text-xs tracking-[0.2em] uppercase text-ledger-gold">Survey 2</p>
         <h3 class="font-display text-xl text-ledger-navy mt-1"><?= $secondType !== null ? htmlspecialchars(survey_label($secondType), ENT_QUOTES, 'UTF-8') : 'List of ICT Projects' ?></h3>
+        <?php if ($secondStarted): ?>
         <p class="text-sm text-ledger-muted mt-1">
-          <?= $secondType === 'systems' ? $progress['app_count'] : $progress['ict_count'] ?> entries &middot; completed
+          <?= $secondCount ?> entr<?= $secondCount === 1 ? 'y' : 'ies' ?> &middot; <?= $secondDone ? 'completed' : 'in progress' ?>
         </p>
-        <a href="review.php?survey=<?= $secondType === 'systems' ? 'app' : 'ict' ?>"
+        <a href="<?= htmlspecialchars($secondUrl . '?view=readonly', ENT_QUOTES, 'UTF-8') ?>"
            class="mt-6 text-center w-full border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-ledger-navy hover:text-white transition-colors">
           VIEW ENTRY
         </a>
+        <?php else: ?>
+        <p class="text-sm text-ledger-muted mt-1">Not started yet</p>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -208,9 +243,21 @@ unset($_SESSION['flash_success']);
     </button>
 
     <?php if ($bothDone): ?>
-    <a href="review.php" class="block text-center w-full mt-4 border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-white transition-colors">
+    <?php /* This used to point at review.php, which is the pre-submit
+       confirmation screen — it immediately redirects back here once
+       you've actually submitted, so the button looked broken. Point it
+       at the real, flat, all-cycles history instead. */ ?>
+    <a href="full-submission-history.php" class="block text-center w-full mt-4 border border-ledger-navy text-ledger-navy text-sm font-semibold tracking-wide py-3 hover:bg-white transition-colors">
       VIEW FULL SUBMISSION HISTORY
     </a>
+    <?php endif; ?>
+
+    <?php if (!empty($pastBatches)): ?>
+    <div class="text-center mt-4">
+      <a href="submission-history.php" class="text-xs font-semibold tracking-wide text-ledger-muted hover:text-ledger-navy transition-colors">
+        VIEW PAST SUBMISSIONS
+      </a>
+    </div>
     <?php endif; ?>
 
   </div>
